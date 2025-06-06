@@ -368,7 +368,8 @@ var chart = ui.Chart.image.histogram({
 print(chart);
 var constantBand = ee.Image(1).rename('constant');
 
-//////// Combine the slope+NDSI+NDVI mask and constant band ///////
+//////// Combine the slope+NDSI+NDVI mask and constant band for obtain the glacial area ///////
+
 var newclassConstant = ndviMask.addBands(constantBand);
 var ndsiFeature = newclassConstant.reduceToVectors({
   geometry: selectedRegion,  
@@ -381,7 +382,6 @@ var ndsiFeature = newclassConstant.reduceToVectors({
 });
 print("NDSI Feature Collection:", ndsiFeature);
 
-// Apply the new snow mask in the NIR band for obtained just the glacier area
 var nir = mosaic.select('nir').clip(ndsiFeature);
 mosaic = mosaic.addBands([nir]).clip(ndsiFeature);
 Map.addLayer(mosaic.select('nir'), { palette: ['FFFFFF', '8888FF', '0000FF', '000088'] }, 'Landsat 8 NIR mask', false);
@@ -551,10 +551,8 @@ var iceRegion_corrected = classB_minus_classA
 Map.addLayer(iceRegion_corrected.updateMask(iceRegion_corrected), {palette: 'yellow'}, 'Exposed Ice', false);
 Map.addLayer(TotalAccum_corrected.updateMask(TotalAccum_corrected),{palette: ['#00FFFF']},'Accumulation altitude bin');
 
-//
   updatePanel(TotalAccum_corrected);
 }
-
  //---------------------------------------------------------------------------//
 // Update the area panel
 //---------------------------------------------------------------------------//
@@ -582,8 +580,6 @@ function updatePanel(TotalAccum_corrected) {
     }
   });
 }
-
-
 
 if (selectedRegion) {
   loadLandsatImages();

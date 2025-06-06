@@ -1,0 +1,590 @@
+ //---------------------------------------------------------------------------//
+// Google Earth Engine code 
+ //---------------------------------------------------------------------------//
+
+
+var descriptionText = 
+  'This code was developed to identify the snow accumulation area in glaciers\n' +
+  'located in the Cordillera Blanca. Using Landsat images along with slope,\n' +
+  'NDSI, and NDVI indices we created a glacial mask and employed an adaptative\n' +
+  'Otsu threshold to determine the snow accumulation. We strongly recomended the\n' +
+  'selection of images in the dry season.The results were validated against\n' +
+  'glaciological mass balance data. The app could take a time for acutualize,\n'+  
+  'especially for larger regions. For questions, please reach out to us—we were happy\n' +
+  'to help. The app was developed by the Centro Polar e Climático team. We are thankfull \n'+
+  'for the Autoridad Nacional del Agua of Peru for provide the mass balance data\n'+
+  'for the validation. For inquiries, please contact us at jlopeslorenz@gmail.com.'
+  
+  
+// Create a panel
+var linkPanel = ui.Panel({
+  widgets: [
+    ui.Panel({
+      widgets: [
+        ui.Label({
+          value: 'GitHub', 
+          style: {
+            fontSize: 'small', 
+            color: '#3300ff', 
+            margin: '0px 6px 0px 0px'
+          }, 
+          targetUrl: 'https://github.com/juliallorenz'
+        }),
+        ui.Label({
+          value: 'Centro Polar e Climático', 
+          style: {
+            fontSize: 'small', 
+            color: '#3300ff', 
+            margin: '0px 0px 0px 8px'
+          }, 
+          targetUrl: 'https://www.centropolar.com/'
+        })
+      ],
+      layout: ui.Panel.Layout.flow('horizontal') 
+    })
+  ],
+  layout: ui.Panel.Layout.Flow('vertical'), 
+  style: {
+    padding: '10px',
+    margin: 'auto', 
+    textAlign: 'center' 
+  }
+});
+//---------------------------------------------------------------------------//
+// Adding data from Cordillera Blanca and initial configuration
+//---------------------------------------------------------------------------//
+
+var glaciers = ee.FeatureCollection(rgi7).filterBounds(cb_area);    //Add the RGI shapefiles from you region of interest
+Map.centerObject(glaciers, 8);
+
+// Definition of the region for the toolkit
+var Amazonia = ee.FeatureCollection(glac_reg_amazonas).filterBounds(rgi7);   // Please in this block you can add your 
+                                                                            // own shapefile data or you can request the entry data
+var Pacifico = ee.FeatureCollection(glac_reg_pac).filterBounds(rgi7);
+var Artesonraju = ee.FeatureCollection(rgi7).filterMetadata('anlys_id', "equals", 766896);
+var Shallap = ee.FeatureCollection(rgi7).filterMetadata('anlys_id', "equals", 767247);
+var Yanamarey = ee.FeatureCollection(rgi7).filterMetadata('anlys_id', "equals", 767363);
+var regions = {
+  'Glaciers Amazonia': Amazonia,
+  'Glaciers Pacific': Pacifico,
+  'Artesonraju': Artesonraju,
+  'Shallap': Shallap,
+  'Yanamarey': Yanamarey
+};
+var selectedRegion = null;
+
+//---------------------------------------------------------------------------//
+//Function to define the selected region and date sliders
+//---------------------------------------------------------------------------//
+
+function setRegion(regionName) {
+  var region = regions[regionName];
+  if (region) {
+    selectedRegion = region.geometry();
+    print('Selected region:', regionName);
+    Map.centerObject(selectedRegion);
+    Map.layers().reset();
+    Map.addLayer(selectedRegion, {}, regionName, true, 0.5);
+    loadLandsatImages(); 
+  } else {
+    print('No regions found:', regionName);
+  }
+}
+var startDateSlider = ui.DateSlider({
+  start: '1984-01-01',
+  end: '2024-01-01',
+  value: '2023-08-20',
+  period: 1,
+  onChange: updateImages 
+});
+
+var endDateSlider = ui.DateSlider({
+  start: '1984-01-01',
+  end: '2024-01-01',
+  value: '2023-08-26',
+  period: 1,
+  onChange: updateImages 
+});
+var controlPanel = ui.Panel({
+  widgets: [
+    ui.Label('APP - Snow accumulation area detection', {
+      padding: '0px 110px',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      color: '#ffffff',
+      fontSize: '16px',
+      fontWeight: 'bold',
+      position: 'bottom-center',
+      whiteSpace: 'pre'
+    }),
+    ui.Label('1. Selected a region', {fontSize:'12px'}),
+    ui.Panel({
+      widgets: [
+        ui.Button('Glaciers Amazonia', function() { setRegion('Glaciers Amazonia'); }),
+        ui.Button('Glaciers Pacific', function() { setRegion('Glaciers Pacific'); }),
+        ui.Button('Artesonraju', function() { setRegion('Artesonraju'); }),
+        ui.Button('Shallap', function() { setRegion('Shallap'); }),
+        ui.Button('Yanamarey', function() { setRegion('Yanamarey'); })
+      ],
+      layout: ui.Panel.Layout.Flow('horizontal') 
+    }),
+
+    ui.Label('2. Check if have a correspondent image in the period for Cordillera Blanca, Peru', {fontSize: '12px'}),
+    ui.Label({value: 'EarthExplorer', targetUrl: 'https://earthexplorer.usgs.gov/'}),
+  
+    ui.Label('3. Select the date range', {fontSize: '12px'}),
+    ui.Panel({
+      widgets: [
+        
+        ui.Panel({
+          widgets: [
+            ui.Label('Initial date:', {fontSize: '10px'}),
+            startDateSlider
+          ],
+          layout: ui.Panel.Layout.Flow('vertical') 
+        }),
+     
+        ui.Panel({
+          widgets: [
+            ui.Label('Final date:', {fontSize: '10px'}),
+            endDateSlider
+          ],
+          layout: ui.Panel.Layout.Flow('vertical') 
+        })
+      ],
+      layout: ui.Panel.Layout.Flow('horizontal') 
+    }),
+  ui.Label('4. Explore the layers generated', {fontSize: '12px'}),
+  ui.Label(descriptionText, {padding: '6px 6px', backgroundColor: 'rgba(0, 0, 0, 0.5)', color: '#ffffff', fontSize: '12px', 
+  position: 'bottom-center', whiteSpace: 'pre-wrap'}),
+  linkPanel
+  ],
+  style: { position: 'bottom-left' }
+});
+
+
+Map.add(controlPanel);
+//---------------------------------------------------------------------------//
+// Update the images
+//---------------------------------------------------------------------------//
+
+function updateImages() {
+  if (!selectedRegion) {
+    print('No selected region to update the images.');
+    return;
+  }
+  Map.layers().reset(); 
+  Map.addLayer(selectedRegion, {}, 'Selected region', true, 0.5); 
+  loadLandsatImages(); 
+}
+
+
+//---------------------------------------------------------------------------//
+// Panel for exhibit the area results
+//---------------------------------------------------------------------------//
+
+var panel = ui.root.widgets().filter(function(widget) {
+  return widget instanceof ui.Panel;
+})[0];
+
+if (!panel) {
+  panel = ui.Panel();
+  panel.style().set('width', '300px');
+  ui.root.add(panel);
+}
+
+var areaLabel = ui.Label('Snow Accumulation Area: -----');
+panel.add(areaLabel);
+
+//---------------------------------------------------------------------------//
+// Apply the band dictionary and the cloud filtering
+//---------------------------------------------------------------------------//
+
+var sensorBandDictLandsatSR = ee.Dictionary({
+  L8: ee.List([1, 2, 3, 4, 5, 6, 18]),
+  L5: ee.List([0, 1, 2, 3, 4, 5, 18])
+});
+
+var STD_NAMESR = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2', 'QA_PIXEL'];
+
+function cloudMaskL58(image) {
+  var qa = image.select('QA_PIXEL');
+  var cloudState = qa.bitwiseAnd(1 << 3).eq(0);
+  return image.updateMask(cloudState);
+}
+//---------------------------------------------------------------------------//
+/// Aplly the meteorological filter
+//---------------------------------------------------------------------------//
+var era5 = ee.ImageCollection('ECMWF/ERA5_LAND/DAILY_AGGR').select('snowfall_sum');
+
+var accumulatePrecipitation = function (image) {
+  var startDate = ee.Date(image.get('system:time_start'));
+  var endDate = startDate.advance(-5, 'day');    // You can change the quantity of days without precipitation
+  var precipitationSum = era5
+    .filterDate(endDate, startDate)
+    .sum()
+    .rename('accumulated_precipitation');
+  return image.updateMask(precipitationSum.lt(1)); 
+};
+
+//---------------------------------------------------------------------------//
+// Load the Landsat images
+//---------------------------------------------------------------------------//
+function loadLandsatImages() {
+  if (!selectedRegion) {
+    print('No regions selected.');
+    return;
+  }
+
+
+  var selected_glacier = ee.FeatureCollection(rgi7).filterBounds(selectedRegion);
+  print(selected_glacier, 'selected glacier')
+  
+  var startDate = ee.Date(startDateSlider.getValue()[0]);
+  var endDate = ee.Date(endDateSlider.getValue()[1]);
+
+  print('Date intervals:', startDate, 'a', endDate);
+
+  var landsat5 = ee.ImageCollection('LANDSAT/LT05/C02/T1_L2')
+    .select(sensorBandDictLandsatSR.get('L5'), STD_NAMESR)
+    .filter(ee.Filter.lt('CLOUD_COVER', 45))
+    .filterDate(startDate, endDate)
+    .filterBounds(selectedRegion)
+    .map(cloudMaskL58)
+    .map(accumulatePrecipitation);
+
+  var landsat8 = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+    .select(sensorBandDictLandsatSR.get('L8'), STD_NAMESR)
+    .filter(ee.Filter.lt('CLOUD_COVER', 45))
+    .filterDate(startDate, endDate)
+    .filterBounds(selectedRegion)
+    .map(cloudMaskL58)
+    .map(accumulatePrecipitation);
+
+  var collection = ee.ImageCollection(landsat5.merge(landsat8));
+  var mosaic = collection.mosaic();
+
+ Map.addLayer(mosaic.clip(selectedRegion), {bands: ['nir'], min: 0, max: 38538}, 'Landsat Image nir', false);
+ Map.addLayer(mosaic.clip(selectedRegion), {bands: ['swir1', 'nir', 'green'], min: 0, max: 38538, gamma: [1.5, 1.0, 0.8]}, 'Landsat false color', false);
+  print(mosaic, 'Actualized Mosaico');
+  
+  
+  //---------------------------------------------------------------------------//
+// Elevation and slope data
+//---------------------------------------------------------------------------//
+
+var elev = ee.Image("USGS/SRTMGL1_003").clip(selectedRegion).select('elevation');
+var slopesmrt = ee.Terrain.slope(elev);
+var slopereclass = ee.Image(1)
+  .where(slopesmrt.gt(0).and(slopesmrt.lte(1)), 1)
+  .where(slopesmrt.gt(1).and(slopesmrt.lte(5)), 2)
+  .where(slopesmrt.gt(5).and(slopesmrt.lte(15)), 3)
+  .where(slopesmrt.gt(15).and(slopesmrt.lte(25)), 4)
+  .where(slopesmrt.gt(25).and(slopesmrt.lte(30)), 5)
+  .where(slopesmrt.gt(30).and(slopesmrt.lte(60)), 6)
+  .where(slopesmrt.gt(60).and(slopesmrt.lte(90)), 7);
+var elevationVis = {
+  min: 0.0,
+  max: 7000,
+  palette: ['0d13d8', '60e1ff', 'ffffff'],
+};
+
+var visparams = {
+  opacity: 1,
+  min: 1,
+  max: 7,
+  palette: ["1a9850", "91cf60", "d9ef8b", "fee08b", "fc8d59", "d73027", 'ae0303']
+};
+  
+    Map.addLayer(slopereclass, visparams, 'SRTM DEM slope', false);
+    Map.addLayer(elev, elevationVis, 'SRTM DEM elevation', false);
+    
+//---------------------------------------------------------------------------//
+// Select the Landsat data you will use (5 or 8) and generate the 
+// slope mask, NDVI mask, NDSI mask, snow mask and the NIR new)
+//---------------------------------------------------------------------------//
+
+var maskslope1 = slopereclass.lte(6);
+var selfmaskslope = maskslope1.selfMask();
+Map.addLayer(selfmaskslope.clip(selectedRegion), { palette: ['green'] }, 'Landsat 8 mask slope', false, 0.3);
+var ndsiraw = mosaic.normalizedDifference(['green', 'swir1']).rename('NDSI1')
+var ndsi = mosaic.normalizedDifference(['green', 'swir1']).gte(0.15).updateMask(selfmaskslope).rename('NDSI'); 
+var ndsiMask = ndsi.selfMask();
+Map.addLayer(ndsiraw.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'cyan']}, 'NDVI mask', false, 0.7);   
+Map.addLayer(ndsiMask.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'cyan']}, 'NDSI mask', false, 0.7);
+var histogram1 = ndsiraw.reduceRegion({
+  reducer: ee.Reducer.histogram({
+    maxBuckets: 100,  
+    minBucketWidth: 0.01,
+    maxRaw: 1e6
+  }),
+  geometry: selectedRegion,
+  scale: 30,
+  bestEffort: true
+});
+var chart1 = ui.Chart.image.histogram({
+  image: ndsiraw,
+  region: selectedRegion,
+  scale: 30,
+  minBucketWidth: 0.01
+})
+.setOptions({
+  title: 'NDSI Histogram',
+  hAxis: {title: 'NDSI1'},
+  vAxis: {title: 'Pixel Count'},
+  series: [{color: 'blue'}]
+});
+
+print(chart1);
+
+var ndviraw = mosaic.normalizedDifference(['nir','red']).rename('NDVI1')
+var ndvi = mosaic.normalizedDifference(['nir', 'red']).gte(-0.3).and(mosaic.normalizedDifference(['nir','red']).lte(0)).updateMask(ndsiMask).rename('NDVI');
+var ndviMask = ndvi.selfMask()
+Map.addLayer(ndviMask.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI mask', false, 0.7);   
+Map.addLayer(ndviraw.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI mask raw', false, 0.7);   
+
+var histogram = ndviraw.reduceRegion({
+  reducer: ee.Reducer.histogram({
+    maxBuckets: 100,  
+    minBucketWidth: 0.01,
+    maxRaw: 1e6
+  }),
+  geometry: selectedRegion,
+  scale: 30,
+  bestEffort: true
+});
+var chart = ui.Chart.image.histogram({
+  image: ndviraw,
+  region: selectedRegion,
+  scale: 30,
+  minBucketWidth: 0.01
+})
+.setOptions({
+  title: 'NDVI Histogram',
+  hAxis: {title: 'NDVI1'},
+  vAxis: {title: 'Pixel Count'},
+  series: [{color: 'green'}]
+});
+
+print(chart);
+var constantBand = ee.Image(1).rename('constant');
+
+//////// Combine the slope+NDSI+NDVI mask and constant band ///////
+var newclassConstant = ndviMask.addBands(constantBand);
+var ndsiFeature = newclassConstant.reduceToVectors({
+  geometry: selectedRegion,  
+  scale: 30,          
+  geometryType: 'polygon',  
+  eightConnected: false,    
+  labelProperty: 'NDVI',    
+  reducer: ee.Reducer.count(), 
+  maxPixels: 1e13    
+});
+print("NDSI Feature Collection:", ndsiFeature);
+
+// Apply the new snow mask in the NIR band for obtained just the glacier area
+var nir = mosaic.select('nir').clip(ndsiFeature);
+mosaic = mosaic.addBands([nir]).clip(ndsiFeature);
+Map.addLayer(mosaic.select('nir'), { palette: ['FFFFFF', '8888FF', '0000FF', '000088'] }, 'Landsat 8 NIR mask', false);
+
+//---------------------------------------------------------------------------//
+// Analysis by the OTSUS method for each year
+//---------------------------------------------------------------------------//
+
+var computeHistogram = function(image, band, region, scale) {
+  var histogram = mosaic.select('nir').reduceRegion({
+    reducer: ee.Reducer.histogram(255, 0.1)
+      .combine('mean', null, true)
+      .combine('variance', null, true), 
+    geometry: ndsiFeature, 
+    scale: 30,
+    bestEffort: true
+  });
+  return histogram;
+};
+var histogram = computeHistogram(mosaic, 'nir', ndsiFeature, 30);
+print(histogram);
+
+// Otsu function (Donchyts et al., 2016)
+var otsu = function(histogram) {
+  var counts = ee.Array(ee.Dictionary(histogram).get('histogram'));
+  var means = ee.Array(ee.Dictionary(histogram).get('bucketMeans'));
+  var size = means.length().get([0]);
+  var total = counts.reduce(ee.Reducer.sum(), [0]).get([0]);
+  var sum = means.multiply(counts).reduce(ee.Reducer.sum(), [0]).get([0]);
+  var mean = sum.divide(total);
+    var indices = ee.List.sequence(1, size); 
+  var bss = indices.map(function(i) {
+    var aCounts = counts.slice(0, 0, i);
+    var aCount = aCounts.reduce(ee.Reducer.sum(), [0]).get([0]);
+    var aMeans = means.slice(0, 0, i);
+    var aMean = aMeans.multiply(aCounts)
+        .reduce(ee.Reducer.sum(), [0]).get([0])
+        .divide(aCount);
+    var bCount = total.subtract(aCount);
+    var bMean = sum.subtract(aCount.multiply(aMean)).divide(bCount);
+    return aCount.multiply(aMean.subtract(mean).pow(2)).add(
+           bCount.multiply(bMean.subtract(mean).pow(2)));
+  });
+
+  var chart = ui.Chart.array.values(ee.Array(bss), 0, means)
+  .setChartType('AreaChart')
+  .setOptions({
+    title: 'NIR variance and Otsu threshold',
+    hAxis: {
+      title: 'Bucket Means',
+      textStyle: { color: '#333', fontSize: 12 },
+      gridlines: { count: 5 }
+    },
+    vAxis: {
+      title: 'Between-Class Variance',
+      textStyle: { color: '#333', fontSize: 12 },
+      gridlines: { color: '#ddd', count: 5 }
+    },
+    annotations: {textStyle: {color: 'red', fontSize: 12},
+      lines: [{value: threshold, label: 'Otsu threshold', color: 'red'}]
+    } ,
+    lineWidth: 3,
+    colors: ['blue'],
+    fillOpacity: 0.3,
+    pointSize: 4,
+    tooltip: { isHtml: true },
+    annotations: {
+      style: 'line',
+      textStyle: { color: 'red', fontSize: 12 }
+    }
+  });
+print(chart);
+
+  return means.sort(bss).get([-1]);
+};
+
+ //---------------------------------------------------------------------------//
+// Otsu threshold
+ //---------------------------------------------------------------------------//
+var threshold = otsu(histogram.get('nir_histogram'));
+var adjustedThreshold = ee.Number(threshold);
+print('threshold', threshold);
+print('adjustedThreshold', adjustedThreshold);
+
+ //---------------------------------------------------------------------------//
+// Generate the accumulation class
+ //---------------------------------------------------------------------------//
+var classA = mosaic.select('nir').gte(adjustedThreshold)
+  .rename('acum')
+  .updateMask(mosaic.select('nir').gte(adjustedThreshold));
+//Map.addLayer(classA, { palette: 'blue' }, 'Classificação OTSUS A', false);
+
+var classB = mosaic.select('nir').lte(adjustedThreshold)
+  .rename('total')
+  .updateMask(mosaic.select('nir').lte(adjustedThreshold));
+//Map.addLayer(classB, { palette: 'yellow' }, 'Classificação OTSUS B', false);
+
+var kernel = ee.Kernel.square({radius: 1});
+var classB_FocalMode = classB.focal_mode({kernel: kernel, iterations:1});
+var classA_FocalMode = classA.focal_mode({kernel: kernel, iterations:1});
+
+ //---------------------------------------------------------------------------//
+// Altitudinal filter step
+ //---------------------------------------------------------------------------//
+var elevBins = elev.divide(30).floor().toInt().rename('elevation');  // Here you can change accordangly your DEM, we use
+                                                                    //30m due to the resolution of our DEM (NASADEM)
+Map.addLayer(elevBins, {min: 0, max: 3000, palette: ['blue', 'green', 'yellow', 'red']}, 'Elevation Bins', false);
+var classA_bin = classA_FocalMode.eq(1); 
+var classB_bin = classB_FocalMode.eq(1)
+var classA_labeled = elevBins.addBands(classA_bin.rename('value'));
+var pixelsBySector = classA_labeled.reduceConnectedComponents({
+  reducer: ee.Reducer.sum(),
+  labelBand: 'elevation'
+});
+
+var ones = ee.Image.constant(1).rename('value');
+var total_labeled = elevBins.addBands(ones);
+var totalbySector = total_labeled.reduceConnectedComponents({
+  reducer: ee.Reducer.sum(),
+  labelBand: 'elevation'
+});
+
+var proportion =  pixelsBySector.divide(totalbySector);
+var SelectedSectors = proportion.lte(0.5).clip(selectedRegion); // This value you can change 
+Map.addLayer(SelectedSectors.updateMask(SelectedSectors), {palette: ['orange']}, 'Sectors with <50% Classe A', false);
+
+var SelectedSectors2 = proportion.gte(0.5).clip(selectedRegion); // This value you can change 
+Map.addLayer(SelectedSectors2.updateMask(SelectedSectors2), {palette: ['magenta']}, 'Sectors with >50% Classe A', false);
+
+var classA_filtered = classA_bin.updateMask(SelectedSectors);
+var classB_filtered = classB_bin.updateMask(SelectedSectors2);
+var classB_filtered_ice = classB_bin.updateMask(SelectedSectors)
+var elevSelectedSectors = elev.updateMask(SelectedSectors2);
+
+var minAltitude = elevSelectedSectors.reduceRegion({
+  reducer: ee.Reducer.median(),
+  geometry: selectedRegion,
+  scale: 30,
+  maxPixels: 1e13
+});
+
+var altLimit = ee.Number(minAltitude.get('elevation'));
+var HihgerPixels = elev.gt(altLimit); 
+var InverseMask = classA_filtered.mask().not();    
+var classB_minus_classA = classB_FocalMode.updateMask(classB_filtered_ice);
+var classA_minus_classB = classA_FocalMode.updateMask(InverseMask);
+
+
+var total_accum = classA_minus_classB
+  .unmask(0) 
+  total_accum = total_accum.gt(0).rename('accumtotal');
+var SnowByAltitude = classB_bin.updateMask(HihgerPixels).rename('accumtotal');
+var SnowByAltitude_filtered = SnowByAltitude.updateMask(total_accum.not());
+
+var TotalAccum_corrected = total_accum
+  .unmask(0)
+  .max(SnowByAltitude_filtered.unmask(0))
+  .rename('accumtotal');
+var binary_accum = TotalAccum_corrected.unmask(0).gt(0);
+
+var iceRegion_corrected = classB_minus_classA
+  .updateMask(binary_accum.not())  // remove os pixels já marcados como acumulação
+  .unmask(0)
+  .gt(0)
+  .rename('exposed_ice_corrected');
+
+Map.addLayer(iceRegion_corrected.updateMask(iceRegion_corrected), {palette: 'yellow'}, 'Exposed Ice', false);
+Map.addLayer(TotalAccum_corrected.updateMask(TotalAccum_corrected),{palette: ['#00FFFF']},'Accumulation altitude bin');
+
+//
+  updatePanel(TotalAccum_corrected);
+}
+
+ //---------------------------------------------------------------------------//
+// Update the area panel
+//---------------------------------------------------------------------------//
+
+function updatePanel(TotalAccum_corrected) {
+  var areaImage = TotalAccum_corrected.multiply(ee.Image.pixelArea());
+
+  var areatotal = areaImage.reduceRegion({
+    reducer: ee.Reducer.sum(),
+    geometry: selectedRegion,
+    scale: 30,
+    crs: 'EPSG:32718',
+    maxPixels: 1e10
+  });
+
+  var acumareasqkm = ee.Number(areatotal.get('accumtotal')).divide(1e6);
+
+  acumareasqkm.evaluate(function(result) {
+    if (result !== null && result !== undefined) {
+      areaLabel.setValue(
+        'Snow Accumulation Area: ' + result.toFixed(2) + ' km²'
+      );
+    } else {
+      areaLabel.setValue('Error in the area calculation.');
+    }
+  });
+}
+
+
+
+if (selectedRegion) {
+  loadLandsatImages();
+}

@@ -1,6 +1,5 @@
- //---------------------------------------------------------------------------//
-// Google Earth Engine code 
- //---------------------------------------------------------------------------//
+/////////////////// Google Earth Engine code //////////////////////////
+ 
 
 
 var descriptionText = 
@@ -50,9 +49,9 @@ var linkPanel = ui.Panel({
     textAlign: 'center' 
   }
 });
-//---------------------------------------------------------------------------//
-// Adding data from Cordillera Blanca and initial configuration
-//---------------------------------------------------------------------------//
+
+
+///////////// Adding data from Cordillera Blanca and initial configuration///////////////
 
 var glaciers = ee.FeatureCollection(rgi7).filterBounds(cb_area);    //Add the RGI shapefiles from you region of interest
 Map.centerObject(glaciers, 8);
@@ -73,9 +72,9 @@ var regions = {
 };
 var selectedRegion = null;
 
-//---------------------------------------------------------------------------//
+////////////////////////////////////////////////////////
 //Function to define the selected region and date sliders
-//---------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////
 
 function setRegion(regionName) {
   var region = regions[regionName];
@@ -163,9 +162,9 @@ var controlPanel = ui.Panel({
 
 
 Map.add(controlPanel);
-//---------------------------------------------------------------------------//
-// Update the images
-//---------------------------------------------------------------------------//
+////////////////////////////////////
+// Update the images/////////////
+///////////////////////////////////
 
 function updateImages() {
   if (!selectedRegion) {
@@ -178,9 +177,8 @@ function updateImages() {
 }
 
 
-//---------------------------------------------------------------------------//
-// Panel for exhibit the area results
-//---------------------------------------------------------------------------//
+/////////////////// Panel for exhibit the area results////////////////////////
+
 
 var panel = ui.root.widgets().filter(function(widget) {
   return widget instanceof ui.Panel;
@@ -195,9 +193,9 @@ if (!panel) {
 var areaLabel = ui.Label('Snow Accumulation Area: -----');
 panel.add(areaLabel);
 
-//---------------------------------------------------------------------------//
-// Apply the band dictionary and the cloud filtering
-//---------------------------------------------------------------------------//
+//////////////////////////////////////////////////////
+// Apply the band dictionary and the cloud filtering//
+/////////////////////////////////////////////////////
 
 var sensorBandDictLandsatSR = ee.Dictionary({
   L8: ee.List([1, 2, 3, 4, 5, 6, 18]),
@@ -211,9 +209,10 @@ function cloudMaskL58(image) {
   var cloudState = qa.bitwiseAnd(1 << 3).eq(0);
   return image.updateMask(cloudState);
 }
-//---------------------------------------------------------------------------//
+///////////////////////////////////////
 /// Aplly the meteorological filter
-//---------------------------------------------------------------------------//
+//////////////////////////////////////
+
 var era5 = ee.ImageCollection('ECMWF/ERA5_LAND/DAILY_AGGR').select('snowfall_sum');
 
 var accumulatePrecipitation = function (image) {
@@ -226,9 +225,10 @@ var accumulatePrecipitation = function (image) {
   return image.updateMask(precipitationSum.lt(1)); 
 };
 
-//---------------------------------------------------------------------------//
+////////////////////////////////
 // Load the Landsat images
-//---------------------------------------------------------------------------//
+///////////////////////////////
+
 function loadLandsatImages() {
   if (!selectedRegion) {
     print('No regions selected.');
@@ -268,9 +268,9 @@ function loadLandsatImages() {
   print(mosaic, 'Actualized Mosaico');
   
   
-  //---------------------------------------------------------------------------//
+  ///////////////////////////////
 // Elevation and slope data
-//---------------------------------------------------------------------------//
+/////////////////////////////////
 
 var elev = ee.Image("USGS/SRTMGL1_003").clip(selectedRegion).select('elevation');
 var slopesmrt = ee.Terrain.slope(elev);
@@ -298,10 +298,10 @@ var visparams = {
     Map.addLayer(slopereclass, visparams, 'SRTM DEM slope', false);
     Map.addLayer(elev, elevationVis, 'SRTM DEM elevation', false);
     
-//---------------------------------------------------------------------------//
+///////////////////////////////////////////////////////////////////
 // Select the Landsat data you will use (5 or 8) and generate the 
 // slope mask, NDVI mask, NDSI mask, snow mask and the NIR new)
-//---------------------------------------------------------------------------//
+//////////////////////////////////////////////////////////////////
 
 var maskslope1 = slopereclass.lte(6);
 var selfmaskslope = maskslope1.selfMask();
@@ -386,9 +386,9 @@ var nir = mosaic.select('nir').clip(ndsiFeature);
 mosaic = mosaic.addBands([nir]).clip(ndsiFeature);
 Map.addLayer(mosaic.select('nir'), { palette: ['FFFFFF', '8888FF', '0000FF', '000088'] }, 'Landsat 8 NIR mask', false);
 
-//---------------------------------------------------------------------------//
+///////////////////////////////////////////////
 // Analysis by the OTSUS method for each year
-//---------------------------------------------------------------------------//
+///////////////////////////////////////////////
 
 var computeHistogram = function(image, band, region, scale) {
   var histogram = mosaic.select('nir').reduceRegion({
@@ -458,34 +458,35 @@ print(chart);
   return means.sort(bss).get([-1]);
 };
 
- //---------------------------------------------------------------------------//
-// Otsu threshold
- //---------------------------------------------------------------------------//
+ 
+/////// Otsu threshold////////
+ 
 var threshold = otsu(histogram.get('nir_histogram'));
 var adjustedThreshold = ee.Number(threshold);
 print('threshold', threshold);
 print('adjustedThreshold', adjustedThreshold);
 
- //---------------------------------------------------------------------------//
+ ///////////////////////////////////////////
 // Generate the accumulation class
- //---------------------------------------------------------------------------//
+ //////////////////////////////////////////
+
 var classA = mosaic.select('nir').gte(adjustedThreshold)
   .rename('acum')
   .updateMask(mosaic.select('nir').gte(adjustedThreshold));
-//Map.addLayer(classA, { palette: 'blue' }, 'Classificação OTSUS A', false);
+
 
 var classB = mosaic.select('nir').lte(adjustedThreshold)
   .rename('total')
   .updateMask(mosaic.select('nir').lte(adjustedThreshold));
-//Map.addLayer(classB, { palette: 'yellow' }, 'Classificação OTSUS B', false);
 
 var kernel = ee.Kernel.square({radius: 1});
 var classB_FocalMode = classB.focal_mode({kernel: kernel, iterations:1});
 var classA_FocalMode = classA.focal_mode({kernel: kernel, iterations:1});
 
- //---------------------------------------------------------------------------//
+ ////////////////////////////
 // Altitudinal filter step
- //---------------------------------------------------------------------------//
+ ////////////////////////////
+
 var elevBins = elev.divide(30).floor().toInt().rename('elevation');  // Here you can change accordangly your DEM, we use
                                                                     //30m due to the resolution of our DEM (NASADEM)
 Map.addLayer(elevBins, {min: 0, max: 3000, palette: ['blue', 'green', 'yellow', 'red']}, 'Elevation Bins', false);
@@ -553,9 +554,9 @@ Map.addLayer(TotalAccum_corrected.updateMask(TotalAccum_corrected),{palette: ['#
 
   updatePanel(TotalAccum_corrected);
 }
- //---------------------------------------------------------------------------//
+ ////////////////////////////
 // Update the area panel
-//---------------------------------------------------------------------------//
+//////////////////////////////
 
 function updatePanel(TotalAccum_corrected) {
   var areaImage = TotalAccum_corrected.multiply(ee.Image.pixelArea());

@@ -2,17 +2,7 @@
  
 
 
-var descriptionText = 
-  'This code was developed to identify the snow accumulation area in glaciers\n' +
-  'located in the Cordillera Blanca. Using Landsat images along with slope,\n' +
-  'NDSI, and NDVI indices we created a glacial mask and employed an adaptative\n' +
-  'Otsu threshold to determine the snow accumulation. We strongly recomended the\n' +
-  'selection of images in the dry season.The results were validated against\n' +
-  'glaciological mass balance data. The app could take a time for acutualize,\n'+  
-  'especially for larger regions. For questions, please reach out to us—we were happy\n' +
-  'to help. The app was developed by the Centro Polar e Climático team. We are thankfull \n'+
-  'for the Autoridad Nacional del Agua of Peru for provide the mass balance data\n'+
-  'for the validation. For inquiries, please contact us at jlopeslorenz@gmail.com.'
+//var descriptionText =  'add your \n' + 'own description'
   
   
 // Create a panel
@@ -26,20 +16,9 @@ var linkPanel = ui.Panel({
             fontSize: 'small', 
             color: '#3300ff', 
             margin: '0px 6px 0px 0px'
-          }, 
-          targetUrl: 'https://github.com/juliallorenz'
-        }),
-        ui.Label({
-          value: 'Centro Polar e Climático', 
-          style: {
-            fontSize: 'small', 
-            color: '#3300ff', 
-            margin: '0px 0px 0px 8px'
-          }, 
-          targetUrl: 'https://www.centropolar.com/'
+          }//, 
+        //  targetUrl: add your link if you want, example: 'https://github.com/juliallorenz/accumulation_area'
         })
-      ],
-      layout: ui.Panel.Layout.flow('horizontal') 
     })
   ],
   layout: ui.Panel.Layout.Flow('vertical'), 
@@ -92,7 +71,7 @@ function setRegion(regionName) {
 var startDateSlider = ui.DateSlider({
   start: '1984-01-01',
   end: '2024-01-01',
-  value: '2023-08-20',
+  value: '2023-08-20', //Here you will set a seed in a date
   period: 1,
   onChange: updateImages 
 });

@@ -288,7 +288,7 @@ Map.addLayer(selfmaskslope.clip(selectedRegion), { palette: ['green'] }, 'Landsa
 var ndsiraw = mosaic.normalizedDifference(['green', 'swir1']).rename('NDSI1')
 var ndsi = mosaic.normalizedDifference(['green', 'swir1']).gte(0.15).updateMask(selfmaskslope).rename('NDSI'); 
 var ndsiMask = ndsi.selfMask();
-Map.addLayer(ndsiraw.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'cyan']}, 'NDVI mask', false, 0.7);   
+Map.addLayer(ndsiraw.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'cyan']}, 'NDSI', false, 0.7);   
 Map.addLayer(ndsiMask.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'cyan']}, 'NDSI mask', false, 0.7);
 var histogram1 = ndsiraw.reduceRegion({
   reducer: ee.Reducer.histogram({
@@ -319,7 +319,7 @@ var ndviraw = mosaic.normalizedDifference(['nir','red']).rename('NDVI1')
 var ndvi = mosaic.normalizedDifference(['nir', 'red']).gte(-0.3).and(mosaic.normalizedDifference(['nir','red']).lte(0)).updateMask(ndsiMask).rename('NDVI');
 var ndviMask = ndvi.selfMask()
 Map.addLayer(ndviMask.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI mask', false, 0.7);   
-Map.addLayer(ndviraw.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI mask raw', false, 0.7);   
+Map.addLayer(ndviraw.clip(selectedRegion), {min: -1, max: 1, palette: ['blue', 'white', 'green']}, 'NDVI', false, 0.7);   
 
 var histogram = ndviraw.reduceRegion({
   reducer: ee.Reducer.histogram({
